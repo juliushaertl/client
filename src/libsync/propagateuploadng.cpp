@@ -32,7 +32,7 @@
 #include <QDir>
 #include <cmath>
 #include <cstring>
-#include <cmath>
+
 namespace OCC {
 
 QUrl PropagateUploadFileNG::chunkUrl(int chunk)
@@ -263,43 +263,10 @@ void PropagateUploadFileNG::startNextChunk()
     quint64 fileSize = _item->_size;
     Q_ASSERT(fileSize >= _sent);
 
-    quint64 currentChunkSize = chunkSize();
-
-    // this will check if getRequestMaxDurationDC is set to 0 or not
-    double requestMaxDurationDC = (double) getRequestMaxDurationDC();
-    if (requestMaxDurationDC != 0) {
-        // this if first chunked file request, so it can start with default size of chunkSize()
-        // if _lastChunkSize != 0 it means that we already have send one request
-        if(_lastChunkSize != 0){
-            //TODO: this is done step by step for debugging purposes
-
-            //get last request timestamp
-            double lastChunkLap = (double) _stopWatch.durationOfLap(QLatin1String("ChunkDuration"));
-
-            //get duration of the request
-            double requestDuration = (double) _stopWatch.addLapTime(QLatin1String("ChunkDuration")) - lastChunkLap;
-
-            // calculate natural logarithm
-            double correctionParameter = log(requestMaxDurationDC / requestDuration) - 1;
-
-            // If logarithm is smaller or equal zero, it means that we exceeded max request duration
-            // If exceeded it will use currentChunkSize = chunkSize()
-            // If did not exceeded, we will increase the chunk size
-            // motivation for logarithm is specified in the dynamic chunking documentation
-            // TODO: give link to documentation
-            if (correctionParameter>0){
-                currentChunkSize = qMin(_lastChunkSize + (qint64) correctionParameter*chunkSize(), maxChunkSize());
-            }
-        }
-
-        //remember the value of last chunk size
-        _lastChunkSize = currentChunkSize;
-    }
-
     // prevent situation that chunk size is bigger then required one to send
-    currentChunkSize = qMin(currentChunkSize, fileSize - _sent);
+    _currentChunkSize = qMin(_propagator->_chunkSize, fileSize - _sent);
 
-    if (currentChunkSize == 0) {
+    if (_currentChunkSize == 0) {
         Q_ASSERT(_jobs.isEmpty()); // There should be no running job anymore
         _finished = true;
         // Finish with a MOVE
@@ -330,7 +297,7 @@ void PropagateUploadFileNG::startNextChunk()
     auto device = new UploadDevice(&_propagator->_bandwidthManager);
     const QString fileName = _propagator->getFilePath(_item->_file);
 
-    if (! device->prepareAndOpen(fileName, _sent, currentChunkSize)) {
+    if (! device->prepareAndOpen(fileName, _sent, _currentChunkSize)) {
         qDebug() << "ERR: Could not prepare upload device: " << device->errorString();
 
         // If the file is currently locked, we want to retry the sync
@@ -346,7 +313,7 @@ void PropagateUploadFileNG::startNextChunk()
     QMap<QByteArray, QByteArray> headers;
     headers["OC-Chunk-Offset"] = QByteArray::number(_sent);
 
-    _sent += currentChunkSize;
+    _sent += _currentChunkSize;
     QUrl url = chunkUrl(_currentChunk);
 
     // job takes ownership of device via a QScopedPointer. Job deletes itself when finishing
@@ -421,6 +388,31 @@ void PropagateUploadFileNG::slotPutFinished()
         abortWithError(status, errorString);
         return;
     }
+
+    // Adjust the chunk size for the time taken.
+    //
+    // Dynamic chunk sizing is enabled if the server configured a
+    // target duration for each chunk upload.
+    double targetDuration = _propagator->account()->capabilities().desiredChunkUploadDuration();
+    if (targetDuration > 0) {
+        double uploadTime = job->msSinceStart();
+
+        auto correctedSize = static_cast<quint64>(
+                _currentChunkSize / uploadTime * targetDuration);
+
+        // There can be multiple chunk uploads going on at the same time.
+        // So don't force the chunk size to the new predicted best size
+        // and instead move it there gradually.
+        _propagator->_chunkSize = qBound(
+                _propagator->minChunkSize(),
+                (_propagator->_chunkSize + correctedSize) / 2,
+                _propagator->maxChunkSize());
+
+        qDebug() << "Chunked upload of " << _currentChunkSize << " took " << uploadTime
+                 << " desired is " << targetDuration << ", expected good chunk size is "
+                 << correctedSize << " and nudged next chunk size to " << _propagator->_chunkSize;
+    }
+
 
     Q_ASSERT(_sent <= _item->_size);
     bool finished = _sent == _item->_size;
