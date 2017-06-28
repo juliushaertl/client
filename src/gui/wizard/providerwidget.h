@@ -7,6 +7,8 @@
 #include <QNetworkAccessManager>
 #include "ui_providerwidget.h"
 
+namespace OCC {
+
 class ProviderWidget : public QWidget
 {
     Q_OBJECT
@@ -39,4 +41,5 @@ private:
     QNetworkAccessManager *_nam;
 };
 
+}
 #endif // PROVIDERWIDGET_H

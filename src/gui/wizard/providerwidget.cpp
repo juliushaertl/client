@@ -8,6 +8,9 @@
 
 #include "config.h"
 #include "providerwidget.h"
+#include "owncloudproviderlistpage.h"
+
+namespace OCC {
 
 ProviderWidget::ProviderWidget(QWidget *parent) :
     QWidget(parent),
@@ -64,6 +67,8 @@ void ProviderWidget::updateProvider(const QListWidgetItem *item)
 void ProviderWidget::openRegistration()
 {
     qDebug() << "Open registration for " << _registrationUrl;
+    OCC::OwncloudProviderListPage* page = qobject_cast<OCC::OwncloudProviderListPage*>(parentWidget()->parentWidget()->parentWidget());
+    page->openRegistration(_registrationUrl);
 }
 
 void ProviderWidget::openInformation()
@@ -80,5 +85,7 @@ void ProviderWidget::finishedImageLoading(QNetworkReply* reply)
         ui->providerLogo->setPixmap(QPixmap::fromImage(img));
         ui->providerLogo->setScaledContents(true);
     }
+
+}
 
 }

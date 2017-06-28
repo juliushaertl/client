@@ -5,6 +5,7 @@
 #include <QNetworkReply>
 #include <QStringListModel>
 #include "ui_owncloudproviderlistpage.h"
+#include "owncloudwizard.h"
 
 class QProgressIndicator;
 
@@ -17,25 +18,25 @@ class OwncloudProviderListPage : public QWizardPage
 public:
     OwncloudProviderListPage(QWidget *parent);
     ~OwncloudProviderListPage();
-    int nextId();
+    int nextId() const;
+    bool isComplete() const;
     void initializePage();
 public slots:
     void toggleFreePlans(bool state);
     void setCountry(QString current);
+    void openRegistration(QString url);
 
 protected slots:
     void setupCustomization();
     void serviceRequestFinished(QNetworkReply* reply);
     void startSpinner();
     void stopSpinner();
-#ifdef APPLICATION_SERVERSETUP
-    void openSetupInstructions();
-#endif
 
 private:
     void loadProviders();
     void filterProviders();
 
+    OwncloudWizard* _ocWizard;
     Ui_OwncloudProviderListPage *ui;
     QNetworkAccessManager *_nam;
     QStringListModel *countryModel;

@@ -10,6 +10,8 @@
 #include <QObject>
 
 #include "owncloudproviderlistpage.h"
+#include "owncloudproviderregistrationpage.h"
+#include "owncloudwizard.h"
 #include "ui_owncloudproviderlistpage.h"
 #include "theme.h"
 #include "config.h"
@@ -119,8 +121,8 @@ void OwncloudProviderListPage::serviceRequestFinished(QNetworkReply* reply)
     if(reply->error() == QNetworkReply::NoError) {
         QString strReply = (QString)reply->readAll();
         QJsonDocument jsonResponse = QJsonDocument::fromJson(strReply.toUtf8());
-
         QStringList countryList;
+
         if (!jsonResponse.isArray())
             return;
         foreach (const QJsonValue & value, jsonResponse.array()) {
@@ -139,7 +141,6 @@ void OwncloudProviderListPage::serviceRequestFinished(QNetworkReply* reply)
             witem->setData(ProviderWidget::DataRole::countryRole, object["flags"].toArray());
 
             ui->listWidget->addItem(witem);
-
             ui->listWidget->setItemWidget(witem, qobject_cast<QWidget*>(widget));
             widget->updateProvider(witem);
             witem->setSizeHint(QSize(ui->listWidget->sizeHint().width(), widget->sizeHint().height()));
@@ -155,9 +156,25 @@ void OwncloudProviderListPage::serviceRequestFinished(QNetworkReply* reply)
     }
 }
 
-int OwncloudProviderListPage::nextId()
+void OwncloudProviderListPage::openRegistration(QString url)
 {
-    return -1;
+    qDebug() << url;
+    OwncloudProviderRegistrationPage *page = qobject_cast<OwncloudProviderRegistrationPage *>(wizard()->page(WizardCommon::Page_ProviderRegistration));
+    page->setProvider(url);
+    wizard()->next();
+}
+
+int OwncloudProviderListPage::nextId() const
+{
+    return WizardCommon::Page_ProviderRegistration;
+}
+
+bool OwncloudProviderListPage::isComplete() const
+{
+    OwncloudProviderRegistrationPage *page = qobject_cast<OwncloudProviderRegistrationPage *>(wizard()->page(WizardCommon::Page_ProviderRegistration));
+    if(page->hasProvider())
+        return true;
+    return false;
 }
 
 }
